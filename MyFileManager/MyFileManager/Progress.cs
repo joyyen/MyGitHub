@@ -13,28 +13,43 @@ namespace MyFileManager
 {
     public partial class Progress : Form
     {
-        private List<FileInfo> _files;
-        private string _target;
+        private MyEngine _engine;
+        private DateTime _startTime;
 
-        /*public Progress()
+        public Progress(MyEngine engine)
         {
             InitializeComponent();
-        }*/
-        public Progress(List<FileInfo> list, string target)
-        {
-            InitializeComponent();
-            
-            _files = list;
-            _target = target;
 
+            _engine = engine;
             MyInitializeComponent();
         }
         private void MyInitializeComponent()
         {
-            progressBarTotalFiles.Maximum = _files.Count;
-            labelTotal.Text = string.Format("Обработано {0} из {1} файлов", 0, _files.Count);
+            SetPBTotalFiles(0);
+            
+        }
+        private void SetPBTotalFiles(int value = -1)
+        {
+            if (value == -1)
+            {
+                if (progressBarTotalFiles.Value < progressBarTotalFiles.Maximum)
+                {
+                    progressBarTotalFiles.Value++;
+                }
+            }
+            else
+            {
+                progressBarTotalFiles.Value = value;
+                progressBarTotalFiles.Maximum = _engine.SourceFiles.Count;
+            }
+                
+            labelTotal.Text = string.Format("Обработано {0} из {1} файлов", progressBarTotalFiles.Value, progressBarTotalFiles.Maximum);
         }
 
+        private void SetCurrentFileInfo(FileInfo file)
+        {
+            labelCurrentFile.Text = string.Format("Файл: {0} Размер: {1} kB",file.Name,file.Length/1024);
+        }
         CopyFileCallbackAction myCallback(FileInfo source, FileInfo destination, object state, long totalFileSize, long totalBytesTransferred)
         {
             double dProgress = (totalBytesTransferred / (double)totalFileSize) * 100.0;
@@ -42,26 +57,42 @@ namespace MyFileManager
             return CopyFileCallbackAction.Continue;
         }
 
+        private void SetTotalTime(string sec)
+        {
+            labelTotalTime.Text = string.Format("Общее время копирования: {0} секунд",sec);
+        }
+
         public void Copy()
         {
-            progressBarTotalFiles.Value = 0;
-            foreach(var file in _files)
+            _startTime = DateTime.Now;
+            foreach(var file in _engine.SourceFiles)
             {
-                //file.CopyTo(Path.Combine(_target,file.Name),true);
+                //file.CopyTo(Path.Combine(_targetFolder,file.Name),true);
                 //FileRoutines.CopyFile(new FileInfo("source.txt"), new FileInfo("dest.txt"), myCallback);
-                
-               
-                //Task.Run(() => FileRoutines.CopyFile(file,new FileInfo(Path.Combine(_target, file.Name)),CopyFileOptions.None));//,myCallback));
-                FileRoutines.CopyFile(file,new FileInfo(Path.Combine(_target, file.Name)),CopyFileOptions.None, myCallback); 
-
-                progressBarTotalFiles.Value ++;
-                labelTotal.Text = string.Format("Обработано {0} из {1} файлов", progressBarTotalFiles.Value, _files.Count);
+                //Task.Run(() => FileRoutines.CopyFile(file,new FileInfo(Path.Combine(_targetFolder, file.Name)),CopyFileOptions.None));//,myCallback));
+                try
+                {
+                    SetCurrentFileInfo(file);
+                    //статический метод копирования который нужно доработать на больших файлах просто блокирует GUI
+                    FileRoutines.CopyFile(file, new FileInfo(Path.Combine(_engine.TargetFolder, file.Name)), CopyFileOptions.None, myCallback);
+                    
+                    SetPBTotalFiles();
+                    SetTotalTime((DateTime.Now - _startTime).TotalSeconds.ToString());
+                    _engine.ProcessedFiles.Add(file);
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            foreach(var file in _engine.ProcessedFiles)
+            {
+                _engine.SourceFiles.Remove(file);
             }
         }
         private void btnClose_Click(object sender, EventArgs e)
         {
             Close();
         }
-
     }
 }
